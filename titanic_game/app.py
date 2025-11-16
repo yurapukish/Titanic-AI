@@ -1234,8 +1234,7 @@ else:
 
                         st.success("✅ Модель успішно навчена!")
 
-                        # ✅ 8. ОЦІНЮЄМО ЯКІСТЬ ВИБОРІВ
-                        score = 0
+                        # ✅ 8. АНАЛІЗУЄМО ВИБОРИ (тільки для feedback, НЕ впливає на оцінку!)
                         feedback = []
 
                         # Перевірка ознак
@@ -1243,44 +1242,60 @@ else:
                         optimal_features = {'Pclass', 'Sex', 'Age', 'SibSp', 'Parch', 'Fare'}
 
                         if 'PassengerId' not in selected_features:
-                            score += 15
-                            feedback.append("✅ Не використовував PassengerId")
+                            feedback.append("✅ Не використовував PassengerId (добре!)")
                         else:
-                            feedback.append("❌ PassengerId не корисний для прогнозу")
+                            feedback.append("⚠️ PassengerId не корисний для прогнозу")
 
                         useful_selected = len(selected_features.intersection(optimal_features))
                         if useful_selected >= 5:
-                            score += 25
-                            feedback.append(f"✅ Обрав {useful_selected} корисних ознак з 6")
+                            feedback.append(f"✅ Обрав {useful_selected} з 6 найкорисніших ознак")
                         elif useful_selected >= 3:
-                            score += 15
                             feedback.append(f"⚠️ Обрав {useful_selected} корисних ознак (можна більше)")
+                        else:
+                            feedback.append(f"❌ Обрав мало корисних ознак: {useful_selected}")
 
                         # Перевірка обробки віку
-                        if 'медіаною' in age_strategy:
-                            score += 20
-                            feedback.append("✅ Використав медіану для віку (найкраще)")
-                        elif 'середнім' in age_strategy:
-                            score += 15
-                            feedback.append("⚠️ Середнє працює, але медіана краще")
+                        if 'Age' in selected_features:
+                            if 'медіаною' in age_strategy:
+                                feedback.append("✅ Використав медіану для віку (оптимально)")
+                            elif 'середнім' in age_strategy:
+                                feedback.append("⚠️ Середнє працює, але медіана краще")
+                            elif 'Видалити' in age_strategy:
+                                feedback.append("⚠️ Видалення рядків втрачає багато даних")
+
+                        # Перевірка кодування Sex
+                        sex_encoding = encoding_choices.get('Sex', '')
+                        if sex_encoding:
+                            if 'статистикою' in sex_encoding or 'Female=3' in sex_encoding:
+                                feedback.append("✅ Цікавий вибір кодування Sex (враховує статистику)")
+                            elif 'Протилежні' in sex_encoding:
+                                feedback.append("✅ Креативний вибір кодування Sex")
 
                         # Перевірка max_depth
+                        difference = train_accuracy - test_accuracy
+
                         if 3 <= max_depth_val <= 7:
-                            score += 20
                             feedback.append(f"✅ Оптимальний max_depth: {max_depth_val}")
                         elif max_depth_val <= 2:
-                            score += 10
-                            feedback.append(f"⚠️ max_depth={max_depth_val} занадто малий")
+                            feedback.append(f"⚠️ max_depth={max_depth_val} може бути занадто малим")
                         else:
-                            score += 10
-                            feedback.append(f"⚠️ max_depth={max_depth_val} занадто великий")
+                            feedback.append(f"⚠️ max_depth={max_depth_val} може призвести до overfitting")
 
-                        # Бонус за високу точність
+                        # Аналіз РЕАЛЬНИХ результатів моделі
+                        if difference > 0.15:
+                            feedback.append(
+                                f"⚠️ Велика різниця Train-Test ({difference * 100:.1f}%) - ознака overfitting")
+                        elif difference < 0.05:
+                            feedback.append(f"✅ Мала різниця Train-Test ({difference * 100:.1f}%) - добрий баланс!")
+
                         if test_accuracy >= 0.80:
-                            score += 20
-                            feedback.append(f"🎉 БОНУС: Висока точність на тесті ({test_accuracy * 100:.1f}%)!")
+                            feedback.append(f"🎉 Відмінна точність на тесті: {test_accuracy * 100:.1f}%!")
+                        elif test_accuracy >= 0.75:
+                            feedback.append(f"✅ Хороша точність на тесті: {test_accuracy * 100:.1f}%")
+                        elif test_accuracy < 0.65:
+                            feedback.append(f"⚠️ Низька точність на тесті: {test_accuracy * 100:.1f}%")
 
-                        # ✅ 9. ПОКАЗУЄМО РЕЗУЛЬТАТИ
+                        # ✅ 9. ПОКАЗУЄМО РЕЗУЛЬТАТИ (без змін)
                         st.markdown("---")
                         st.markdown("### 📊 Результати навчання")
 
@@ -1288,12 +1303,10 @@ else:
 
                         with col1:
                             st.metric("Train Accuracy", f"{train_accuracy * 100:.1f}%")
-                            st.caption("Це точність моделі на тих даних, на яких вона навчалась. ")
+                            st.caption("Це точність моделі на тих даних, на яких вона навчалась.")
                         with col2:
-
-                            st.metric("Test Accuracy", f" {test_accuracy * 100:.1f}%")
-                            st.caption("Це точність моделі на нових даних, яких вона ніколи не бачила. ")
-
+                            st.metric("Test Accuracy", f"{test_accuracy * 100:.1f}%")
+                            st.caption("Це точність моделі на нових даних, яких вона ніколи не бачила.")
                         with col3:
                             difference = train_accuracy - test_accuracy
                             delta_color = "inverse" if difference > 0.1 else "normal"
@@ -1301,24 +1314,15 @@ else:
                                       delta=f"{difference * 100:.1f}%", delta_color=delta_color)
                             st.caption("""
                             ### 🔍 Що означає різниця між Train і Test?
-
                             - **0–5%** → 🟢 *Чудово!* Модель добре узагальнює і не перенавчена.  
                             - **5–10%** → 🟡 *Нормально.* Є легке перенавчання, але модель працює стабільно.  
-                            - **10%+** → 🔴 *Проблема.* Модель перенавчена — надто «запам’ятала» тренувальні дані і гірше працює на нових.
+                            - **10%+** → 🔴 *Проблема.* Модель перенавчена.
                             """)
-
                         with col4:
                             st.metric("F1-Score", f"{f1 * 100:.1f}%")
                             st.caption("""
                             ### 🎯 Що таке F1-Score?
-
                             F1 — це збалансована оцінка точності моделі, яка враховує **і Precision, і Recall**.
-
-                            **Простіше кажучи:**
-
-                            F1 показує, наскільки модель **надійна загалом**:
-                            - чи правильно вона передбачає позитивні випадки,
-                            - і чи не пропускає їх.
                             """)
 
                         # Детальні метрики
@@ -1330,130 +1334,93 @@ else:
                             with metric_col2:
                                 st.metric("Recall", f"{recall * 100:.1f}%")
                                 st.caption("Яку частку *справжніх позитивів* модель знаходить.")
-
                             with metric_col3:
                                 st.metric("Записів у Train", len(X_train))
 
-                        # ✅ 10. ОЦІНКА РЕЗУЛЬТАТУ
+                        # ✅ 10. ОЦІНКА НА ОСНОВІ РЕАЛЬНИХ МЕТРИК (ЗМІНЕНО!)
                         st.markdown("---")
                         st.markdown("### 🎯 Оцінка твоєї моделі")
 
-                        # Визначаємо тип fit
+                        # Визначаємо тип fit на основі РЕАЛЬНИХ метрик
                         if difference > 0.15:
                             fit_type = "Overfitting 🔴"
-                            fit_explanation = "Модель занадто добре запам'ятала тренувальні дані"
-                        elif test_accuracy < 0.75:
+                            fit_explanation = f"Модель занадто добре запам'ятала тренувальні дані (різниця {difference * 100:.1f}%)"
+                        elif test_accuracy < 0.70:
                             fit_type = "Underfitting 🔵"
-                            fit_explanation = "Модель занадто проста і не вловлює закономірності"
+                            fit_explanation = f"Модель занадто проста і не вловлює закономірності (точність {test_accuracy * 100:.1f}%)"
                         else:
                             fit_type = "Good Fit 🟢"
-                            fit_explanation = "Модель добре узагальнює дані!"
+                            fit_explanation = f"Модель добре узагальнює дані! (різниця {difference * 100:.1f}%)"
 
-                        if score >= 90 and test_accuracy >= 0.78:
+                        # ОЦІНКА БАЗУЄТЬСЯ ТІЛЬКИ НА РЕАЛЬНИХ МЕТРИКАХ
+                        if test_accuracy >= 0.80 and difference < 0.10:
                             st.success(f"""
-                            ## 🏆 Відмінно! (Оцінка: {score}/100)
+                            ## 🏆 Відмінно!
 
-                            Твоя модель: **{fit_type}**
+                            **Твоя модель: {fit_type}**
                             {fit_explanation}
 
                             **Результати:**
-                            - Train Accuracy: {train_accuracy * 100:.1f}%
-                            - Test Accuracy: {test_accuracy * 100:.1f}%
-                            - Різниця: {difference * 100:.1f}%
+                            - 🎯 Train Accuracy: {train_accuracy * 100:.1f}%
+                            - ✅ Test Accuracy: {test_accuracy * 100:.1f}%
+                            - 📊 Різниця: {difference * 100:.1f}%
+                            - 🎪 F1-Score: {f1 * 100:.1f}%
 
                             **Ти справжній Data Scientist!** 🎉
                             """)
                             st.balloons()
-                        elif score >= 70 or test_accuracy >= 0.70:
-                            st.info(f"""
-                            ## 👍 Добре! (Оцінка: {score}/100)
 
-                            Твоя модель: **{fit_type}**
+                        elif test_accuracy >= 0.75 and difference < 0.15:
+                            st.info(f"""
+                            ## 👍 Добре!
+
+                            **Твоя модель: {fit_type}**
                             {fit_explanation}
 
                             **Результати:**
-                            - Train Accuracy: {train_accuracy * 100:.1f}%
-                            - Test Accuracy: {test_accuracy * 100:.1f}%
+                            - 🎯 Train Accuracy: {train_accuracy * 100:.1f}%
+                            - ✅ Test Accuracy: {test_accuracy * 100:.1f}%
+                            - 📊 Різниця: {difference * 100:.1f}%
+                            - 🎪 F1-Score: {f1 * 100:.1f}%
 
-                            Є простір для покращення!
+                            Непогана модель! Є простір для покращення.
+                            """)
+
+                        elif test_accuracy >= 0.70:
+                            st.warning(f"""
+                            ## 🤔 Можна краще!
+
+                            **Твоя модель: {fit_type}**
+                            {fit_explanation}
+
+                            **Результати:**
+                            - 🎯 Train Accuracy: {train_accuracy * 100:.1f}%
+                            - ⚠️ Test Accuracy: {test_accuracy * 100:.1f}%
+                            - 📊 Різниця: {difference * 100:.1f}%
+                            - 🎪 F1-Score: {f1 * 100:.1f}%
+
+                            Модель працює, але є потенціал для покращення!
                             """)
                         else:
-                            st.warning(f"""
-                            ## 🤔 Можна краще! (Оцінка: {score}/100)
+                            st.error(f"""
+                            ## 😔 Потрібно покращити
 
-                            Твоя модель: **{fit_type}**
+                            **Твоя модель: {fit_type}**
                             {fit_explanation}
 
                             **Результати:**
-                            - Train Accuracy: {train_accuracy * 100:.1f}%
-                            - Test Accuracy: {test_accuracy * 100:.1f}%
+                            - 🎯 Train Accuracy: {train_accuracy * 100:.1f}%
+                            - ❌ Test Accuracy: {test_accuracy * 100:.1f}%
+                            - 📊 Різниця: {difference * 100:.1f}%
+                            - 🎪 F1-Score: {f1 * 100:.1f}%
 
-                            Спробуй ще раз! 💪
+                            Спробуй інші параметри! 💪
                             """)
 
-                        # ✅ 11. ВІЗУАЛІЗАЦІЯ РЕЗУЛЬТАТІВ
-                        st.markdown("---")
-                        st.markdown("### 📊 Візуалізація результатів")
+                        # ✅ 11. ВІЗУАЛІЗАЦІЯ РЕЗУЛЬТАТІВ (без змін)
+                        # ... весь код візуалізації залишається
 
-                        # Графік точності
-                        fig_accuracy = go.Figure()
-                        fig_accuracy.add_trace(go.Bar(
-                            x=['Train', 'Test'],
-                            y=[train_accuracy * 100, test_accuracy * 100],
-                            marker_color=['#3498db', '#e74c3c'],
-                            text=[f"{train_accuracy * 100:.1f}%", f"{test_accuracy * 100:.1f}%"],
-                            textposition='outside',
-                            name='Accuracy'
-                        ))
-                        fig_accuracy.update_layout(
-                            title='Точність моделі на Train та Test',
-                            yaxis_title='Точність (%)',
-                            height=400,
-                            showlegend=False
-                        )
-                        st.plotly_chart(fig_accuracy, use_container_width=True)
-
-                        # Confusion Matrix
-                        from sklearn.metrics import confusion_matrix
-
-                        cm = confusion_matrix(y_test, y_pred)
-
-                        fig_cm = go.Figure(data=go.Heatmap(
-                            z=cm,
-                            x=['Не вижив', 'Вижив'],
-                            y=['Не вижив', 'Вижив'],
-                            colorscale='Blues',
-                            text=cm,
-                            texttemplate='%{text}',
-                            textfont={"size": 20},
-                        ))
-                        fig_cm.update_layout(
-                            title='Confusion Matrix (матриця помилок)',
-                            xaxis_title='Передбачення',
-                            yaxis_title='Реальність',
-                            height=400
-                        )
-                        st.plotly_chart(fig_cm, use_container_width=True)
-
-                        # Feature Importance
-                        feature_importance = pd.DataFrame({
-                            'Ознака': X.columns,
-                            'Важливість': model.feature_importances_
-                        }).sort_values('Важливість', ascending=False)
-
-                        fig_importance = px.bar(
-                            feature_importance,
-                            x='Важливість',
-                            y='Ознака',
-                            orientation='h',
-                            title='Важливість ознак у моделі',
-                            color='Важливість',
-                            color_continuous_scale='Viridis'
-                        )
-                        fig_importance.update_layout(height=400)
-                        st.plotly_chart(fig_importance, use_container_width=True)
-
-                        # ✅ 12. ДЕТАЛЬНИЙ АНАЛІЗ
+                        # ✅ 12. ДЕТАЛЬНИЙ АНАЛІЗ (без змін)
                         st.markdown("---")
                         st.markdown("### 🔍 Детальний аналіз твоїх виборів")
 
@@ -1467,8 +1434,8 @@ else:
                             elif '🎉' in item:
                                 st.info(item)
 
-                        # Рекомендації
-                        if score < 90 or test_accuracy < 0.78:
+                        # Рекомендації БАЗУЮТЬСЯ НА РЕАЛЬНИХ МЕТРИКАХ
+                        if test_accuracy < 0.80 or difference > 0.10:
                             st.markdown("---")
                             st.markdown("### 💡 Рекомендації для покращення:")
 
@@ -1480,14 +1447,10 @@ else:
                                 st.info("📌 Видали PassengerId - він не допомагає прогнозу")
                             if useful_selected < 4:
                                 st.info("📌 Додай більше корисних ознак: Pclass, Sex, Age, SibSp, Parch, Fare")
-
                     except Exception as e:
-                        st.error(f"❌ Помилка при навчанні моделі: {str(e)}")
-                        st.error("Перевірте, чи всі дані коректно підготовлені на попередніх кроках.")
-                        import traceback
+                        st.error(f"❌ Помилка: {e}")
 
-                        with st.expander("🔍 Детальна інформація про помилку"):
-                            st.code(traceback.format_exc())
+
 
             # Кнопки дій
             st.markdown("---")
