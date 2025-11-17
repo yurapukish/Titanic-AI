@@ -1482,3 +1482,15 @@ else:
         """,
         unsafe_allow_html=True
     )
+    # Посилання на курси
+    st.markdown(
+        """
+        <div style='text-align: center; color: #999; padding: 10px; font-size: 14px;'>
+            <p>Створено за підтримки Сertifiqate UA</p>
+            <p>Дізнайтеся більше про ISTQB AI Testing:</p>
+            <a href='https://certifi-qa-te.com/istqb-ai-testing' target='_blank'>📖 ISTQB AI Testing курс</a> • 
+            <a href='https://www.linkedin.com/company/certifiqate-ua/posts/?feedView=all' target='_blank'>💼 Certifiqate UA</a>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
